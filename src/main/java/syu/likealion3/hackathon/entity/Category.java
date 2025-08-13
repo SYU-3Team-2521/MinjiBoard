@@ -1,46 +1,23 @@
 package syu.likealion3.hackathon.entity;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonValue;
-import lombok.Getter;
-
 /**
- * 게시글 카테고리를 정의하는 열거형
+ * 게시글 카테고리
+ * - enum 이름은 API 파라미터/응답에 그대로 쓰입니다.
+ * - 한글 라벨은 화면 표시에만 참고용입니다.
  */
-@Getter
 public enum Category {
-    MARKET("전통시장·마트"),
-    MEDICAL("약국·병원"),
-    FOOD("음식점·카페·편의점"),
+    MARKET("전통시장&마트"),
+    PHARMACY_HOSPITAL("약국&병원"),
+    FOOD_CAFE_CONVENIENCE("음식점&카페&편의점"),
     ETC("기타");
 
-    private final String displayName;
+    private final String labelKo;
 
-    Category(String displayName) {
-        this.displayName = displayName;
+    Category(String labelKo) {
+        this.labelKo = labelKo;
     }
 
-    /**
-     * JSON 직렬화 시 한글명으로 출력
-     */
-    @JsonValue
-    public String getDisplayName() {
-        return displayName;
-    }
-
-    /**
-     * 문자열에서 Category로 변환 (대소문자 무시)
-     */
-    @JsonCreator
-    public static Category fromString(String value) {
-        if (value == null) return null;
-
-        for (Category category : Category.values()) {
-            if (category.name().equalsIgnoreCase(value) ||
-                    category.displayName.equals(value)) {
-                return category;
-            }
-        }
-        throw new IllegalArgumentException("Unknown category: " + value);
+    public String getLabelKo() {
+        return labelKo;
     }
 }

@@ -2,32 +2,24 @@ package syu.likealion3.hackathon.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import jakarta.validation.constraints.Size;
 import syu.likealion3.hackathon.entity.Category;
 
-@Getter
-@NoArgsConstructor
-public class PostCreateRequest {
+public record PostCreateRequest(
+        @NotNull(message = "category is required")
+        Category category,
 
-    @NotBlank(message = "제목은 필수입니다.")
-    private String title;
+        @NotBlank(message = "name is required")
+        @Size(max = 100, message = "name must be <= 100")
+        String name,
 
-    @NotBlank(message = "본문은 필수입니다.")
-    private String content;
+        @NotBlank(message = "address is required")
+        @Size(max = 255, message = "address must be <= 255")
+        String address,
 
-    @NotBlank(message = "카테고리는 필수입니다.")
-    private String category;
+        @NotBlank(message = "content is required")
+        String content,
 
-    private String imageUrl; // 선택
-
-    @NotBlank(message = "가게 이름은 필수입니다.")
-    private String storeName;
-
-    @NotBlank(message = "가게 주소는 필수입니다.")
-    private String storeAddress;
-
-    public Category toCategory() {
-        return Category.fromString(category);
-    }
-}
+        @Size(max = 512, message = "imgUrl must be <= 512")
+        String imgUrl
+) {}
