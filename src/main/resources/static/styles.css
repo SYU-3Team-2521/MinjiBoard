@@ -1,0 +1,55 @@
+:root {
+    --bg:#0b0f14; --panel:#121820; --muted:#7b8a9a; --text:#e6eef6; --primary:#7cc0ff; --accent:#ffae57; --ok:#5cd27c; --danger:#ff6b6b;
+}
+* { box-sizing: border-box; }
+html,body { margin:0; padding:0; background:var(--bg); color:var(--text); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", Arial; }
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.topbar { position: sticky; top:0; z-index:10; display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:0.8rem 1.2rem; background:#0f141b; border-bottom:1px solid #1f2833;}
+.brand { font-weight:700; letter-spacing:0.3px; }
+.topbar nav a { margin-left:1rem; }
+
+.container { max-width: 1024px; margin: 1rem auto 3rem; padding: 0 1rem; }
+.panel { background:var(--panel); border:1px solid #1e2732; border-radius:14px; padding:16px; }
+.row { display:flex; gap:12px; flex-wrap:wrap; }
+.grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fill,minmax(260px,1fr)); }
+
+.btn { display:inline-block; border:1px solid #2a3544; background:#18202b; color:var(--text); padding:8px 12px; border-radius:10px; cursor:pointer; }
+.btn:hover { background:#1b2431; }
+.btn.primary { border-color:#2a4158; background:#16314a; color:#eaf6ff; }
+.btn.primary:hover { background:#183a57; }
+.btn.ok { border-color:#2a4a36; background:#143223; }
+.btn.danger { border-color:#5a2a2a; background:#3a1818; }
+
+.badge { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:#dce9f7; background:#162231; border:1px solid #273243; border-radius:999px; padding:4px 8px; }
+.help { color: var(--muted); font-size: 13px; }
+
+.input, .select, .textarea {
+    width:100%; background:#0f141b; color:var(--text);
+    border:1px solid #253140; border-radius:10px; padding:10px 12px;
+}
+.textarea { min-height:100px; resize: vertical; }
+
+.card { background:#111822; border:1px solid #1f2a3a; border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
+.card .thumb { background:#0e141c; height:160px; display:flex; align-items:center; justify-content:center; color:#8293a6; font-size:13px; }
+.card img { width:100%; height:160px; object-fit:cover; display:block; }
+.card .body { padding:12px; display:flex; flex-direction:column; gap:8px; }
+.kv { font-size:13px; color:#becee2; }
+.kv b { color:#e9f2ff; }
+
+.toolbar { display:flex; gap:8px; align-items:end; flex-wrap:wrap; margin-bottom:12px; }
+.pager { display:flex; gap:8px; align-items:center; justify-content:flex-end; margin-top:8px; }
+.hr { height:1px; background:#223044; margin:12px 0; border:0; }
+
+.center { text-align:center; padding: 24px; color: var(--muted);}
+.footer { text-align:center; color:var(--muted); padding:24px 0; border-top:1px solid #1b2532; background:#0d131a;}
+
+.like { display:inline-flex; align-items:center; gap:6px; }
+.like.liked .icon { color: var(--accent); }
+.icon { font-style:normal; }
+
+/* 목록 카드에서 쓰는 하트 버튼 */
+.btn.heart { display:inline-flex; align-items:center; gap:6px; }
+.btn.heart .icon { color:#d8dde6; }
+.btn.heart.liked .icon { color: var(--accent); }

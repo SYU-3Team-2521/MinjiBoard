@@ -2,53 +2,86 @@ package syu.likealion3.hackathon.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.LocalDateTime;
 
-@Entity
+/**
+ * 게시글 엔티티
+ * - 목록/상세/좋아요/댓글의 기반이 되는 핵심 테이블
+ */
 @Getter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-@Table(name = "posts")
-public class Post extends BaseTimeEntity {
+@ToString
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@EqualsAndHashCode(of = "id")
+@Entity
+@Table(
+        name = "posts",
+        indexes = {
+                @Index(name = "idx_posts_category", columnList = "category"),
+                @Index(name = "idx_posts_likeCount", columnList = "likeCount")
+        }
+)
+public class Post {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 100)
-    private String title;              // 게시글 제목
-
-    @Column(columnDefinition = "TEXT", nullable = false)
-    private String content;            // 게시글 본문
-
+    /** 카테고리 (문자열로 저장) */
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private Category category;         // 카테고리
+    @Column(nullable = false, length = 40)
+    private Category category;
 
-    private String imageUrl;           // 이미지 URL (선택사항)
-
+    /** 가게 이름 */
     @Column(nullable = false, length = 100)
-    private String storeName;          // 가게 이름
+    private String name;
 
-    @Column(nullable = false, length = 200)
-    private String storeAddress;       // 가게 주소
+    /** 주소 */
+    @Column(nullable = false, length = 255)
+    private String address;
 
+    /** 설명/홍보글 (긴 문장 가능) */
+    @Lob
     @Column(nullable = false)
-    private int likeCount = 0;         // 좋아요 수
+    private String content;
 
-    /**
-     * 좋아요 수 증가
-     */
-    public void incrementLikeCount() {
-        this.likeCount++;
+    /** 대표 이미지 URL (단일) */
+    @Column(length = 512)
+    private String imgUrl;
+
+    /** 좋아요 수 */
+    @Column(nullable = false)
+    private Integer likeCount;
+
+    /** 생성 시각 */
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @Builder
+    private Post(Category category,
+                 String name,
+                 String address,
+                 String content,
+                 String imgUrl,
+                 Integer likeCount,
+                 LocalDateTime createdAt) {
+        this.category = category;
+        this.name = name;
+        this.address = address;
+        this.content = content;
+        this.imgUrl = imgUrl;
+        this.likeCount = likeCount;
+        this.createdAt = createdAt;
     }
 
-    /**
-     * 좋아요 수 감소 (0 이하로 내려가지 않도록)
-     */
-    public void decrementLikeCount() {
-        if (this.likeCount > 0) {
-            this.likeCount--;
-        }
+    /** 영속화 직전 기본값 처리 */
+    @PrePersist
+    protected void onCreate() {
+        if (this.likeCount == null) this.likeCount = 0;
+        if (this.createdAt == null) this.createdAt = LocalDateTime.now();
+    }
+
+    /** 좋아요 증가 (동시성 제어는 서비스/레포지토리에서 처리) */
+    public void incrementLike() {
+        this.likeCount = this.likeCount + 1;
     }
 }
