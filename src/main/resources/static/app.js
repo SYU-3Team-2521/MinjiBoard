@@ -1,26 +1,28 @@
-// ====== Config ======
+// ===== API & Utils =====
 const API = {
-    list:   ({category, page=0, size=10, sort="likeCount,desc"}) =>
-        `/api/posts?${params({category, page, size, sort})}`,
+    list:   ({category, page=0, size=8, sort="likeCount,desc"}) =>
+        `/api/posts?${toParams({category, page, size, sort})}`,
     detail: (id)   => `/api/posts/${id}`,
     create: ()     => `/api/posts`,
     like:   (id)   => `/api/posts/${id}/like`,
     comments: {
-        list:  (postId, page=0, size=10) => `/api/posts/${postId}/comments?${params({page,size,sort:"createdAt,desc"})}`,
-        create:(postId) => `/api/posts/${postId}/comments`
-    }
+        list:  (postId, page=0, size=10, sort="createdAt,desc") =>
+            `/api/posts/${postId}/comments?${toParams({page,size,sort})}`,
+        create:(postId) => `/api/posts/${postId}/comments`,
+    },
 };
 
-// 카테고리 한글 라벨
 const CATEGORY_LABELS = {
+    "": "전체",
     "MARKET": "전통시장&마트",
     "PHARMACY_HOSPITAL": "약국&병원",
     "FOOD_CAFE_CONVENIENCE": "음식점&카페&편의점",
     "ETC": "기타"
 };
+const CAT_KEYS = Object.keys(CATEGORY_LABELS).filter(k=>k!=="");
 function catLabel(code){ return CATEGORY_LABELS[code] || code; }
 
-function params(obj){
+function toParams(obj){
     const sp = new URLSearchParams();
     Object.entries(obj).forEach(([k,v])=>{
         if (v===undefined || v===null || v==="") return;
@@ -29,285 +31,347 @@ function params(obj){
     return sp.toString();
 }
 async function jget(url){
-    const res = await fetch(url, {credentials:"include"});
-    if(!res.ok) throw await toErr(res);
-    return res.json();
+    const r = await fetch(url, {credentials:"include"});
+    if(!r.ok) throw await toErr(r);
+    return r.json();
 }
 async function jpost(url, body){
-    const res = await fetch(url, {
+    const r = await fetch(url, {
         method:"POST",
         headers:{ "Content-Type":"application/json" },
         credentials:"include",
         body: JSON.stringify(body||{})
     });
-    if(!res.ok) throw await toErr(res);
-    return res.json();
+    if(!r.ok) throw await toErr(r);
+    return r.json();
 }
 async function toErr(res){
-    let msg = `${res.status} ${res.statusText}`;
-    try { const j = await res.json(); msg = `${msg}\n${j.code||""} ${j.message||""}` } catch(_){}
-    return new Error(msg);
+    let m = `${res.status} ${res.statusText}`;
+    try { const j = await res.json(); m += `\n${j.code||""} ${j.message||""}`; } catch(_){}
+    return new Error(m);
 }
+function esc(s){ return String(s??"").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function v(sel){ return document.querySelector(sel).value.trim(); }
 
-// ====== Simple Router ======
+// ===== Router =====
 window.addEventListener("hashchange", route);
 window.addEventListener("DOMContentLoaded", route);
 
 function route(){
-    document.title = "민생-췍"; // 페이지 제목
+    document.title = "민생-췍";
     const app = document.getElementById("app");
     const hash = location.hash || "#/";
-    const m = hash.match(/^#\/post\/(\d+)/);
-    document.querySelectorAll('nav a').forEach(a=>a.classList.remove('active'));
 
-    if (hash.startsWith("#/new")) {
-        document.getElementById('nav-new').classList.add('active');
-        renderNew(app);
-    } else if (m) {
-        document.getElementById('nav-list').classList.add('active');
-        renderDetail(app, Number(m[1]));
-    } else {
-        document.getElementById('nav-list').classList.add('active');
-        renderList(app);
-    }
+    if (hash.startsWith("#/new"))    return renderNew(app);
+    if (hash.startsWith("#/post/"))  return renderDetail(app, Number(hash.split("/")[2]));
+    return renderList(app);
 }
 
-// ====== Views ======
+// ===== List View =====
 async function renderList(root){
     root.innerHTML = `
-    <div class="panel">
+    <section class="panel">
       <div class="toolbar">
-        <label>
-          <div class="help">카테고리</div>
-          <select id="f-category" class="select">
-            <option value="">전체</option>
-            ${Object.keys(CATEGORY_LABELS).map(c=>`<option value="${c}">${catLabel(c)}</option>`).join("")}
-          </select>
-        </label>
-        <label>
-          <div class="help">페이지 크기</div>
-          <select id="f-size" class="select">
-            ${[5,10,20].map(n=>`<option ${n===10?"selected":""} value="${n}">${n}</option>`).join("")}
-          </select>
-        </label>
-        <span class="badge">정렬: 좋아요 내림차순</span>
-        <span class="spacer"></span>
-        <a class="btn primary" href="#/new">+ 글쓰기</a>
+        <div class="pills" id="pill-wrap">
+          ${['', ...CAT_KEYS].map(c=>{
+        const cls = c==='' ? "pill active" : "pill";
+        return `<button class="${cls}" data-cat="${c}">${esc(CATEGORY_LABELS[c])}</button>`;
+    }).join('')}
+        </div>
+        <div class="sorttabs">
+          <a href="javascript:void(0)" data-sort="createdAt,desc" id="sort-new">최신순</a>
+          <a href="javascript:void(0)" data-sort="likeCount,desc" id="sort-pop" class="active">인기순</a>
+        </div>
       </div>
 
-      <div id="list" class="grid"></div>
-      <div class="pager">
-        <button class="btn" id="btn-prev">이전</button>
-        <div id="page-indicator" class="help"></div>
-        <button class="btn" id="btn-next">다음</button>
-      </div>
-    </div>
+      <div id="grid" class="grid"></div>
+      <div id="pager" class="pager"></div>
+    </section>
   `;
 
-    const state = { category:"", page:0, size:10 };
-    const ddlCategory = root.querySelector("#f-category");
-    const ddlSize = root.querySelector("#f-size");
-    const listEl = root.querySelector("#list");
+    const state = { category:"", sort:"likeCount,desc", page:0, size:8, q:"" };
 
-    ddlCategory.addEventListener('change', ()=>{ state.category = ddlCategory.value||""; state.page=0; load(); });
-    ddlSize.addEventListener('change', ()=>{ state.size = Number(ddlSize.value); state.page=0; load(); });
-    root.querySelector("#btn-prev").addEventListener('click', ()=>{ state.page=Math.max(0, state.page-1); load(); });
-    root.querySelector("#btn-next").addEventListener('click', ()=>{ state.page=state.page+1; load(); });
+    // 헤더 검색창 이벤트
+    const searchInput = document.getElementById("search-input");
+    const searchBtn   = document.getElementById("search-btn");
+    const applySearch = ()=>{
+        state.q = (searchInput?.value||"").trim();
+        state.page = 0;
+        load();
+    };
+    searchBtn?.addEventListener("click", applySearch);
+    searchInput?.addEventListener("keydown", (e)=>{ if(e.key==="Enter") applySearch(); });
 
-    // 목록에서 하트(좋아요) 가능 — 이벤트 델리게이션
-    listEl.addEventListener('click', async (e)=>{
-        const btn = e.target.closest('button[data-like]');
-        if (!btn) return;
-        const id = Number(btn.dataset.id);
-        if (!id) return;
-
-        btn.disabled = true;
-        try {
-            const r = await jpost(API.like(id), {});
-            // 숫자 업데이트 & 버튼 상태 표시
-            const cnt = btn.querySelector('.cnt');
-            if (cnt) cnt.textContent = r.likeCount;
-            btn.classList.add('liked');
-            // (서버가 쿠키로 중복 방지하므로, 새로고침 전까지는 버튼 비활성 유지)
-        } catch(err) {
-            alert("좋아요 실패:\n" + err.message);
-            btn.disabled = false;
-        }
+    // 카테고리
+    document.getElementById("pill-wrap").addEventListener("click", (e)=>{
+        const b = e.target.closest("button[data-cat]");
+        if(!b) return;
+        state.category = b.dataset.cat;
+        state.page = 0;
+        document.querySelectorAll("#pill-wrap .pill").forEach(x=>x.classList.remove("active"));
+        b.classList.add("active");
+        load();
     });
 
+    // 정렬
+    const sortNew = document.getElementById("sort-new");
+    const sortPop = document.getElementById("sort-pop");
+    function setSort(s){
+        state.sort = s; state.page = 0; load();
+        sortNew.classList.toggle("active", s==="createdAt,desc");
+        sortPop.classList.toggle("active", s==="likeCount,desc");
+    }
+    sortNew.addEventListener("click", ()=>setSort("createdAt,desc"));
+    sortPop.addEventListener("click", ()=>setSort("likeCount,desc"));
+
+    const grid = document.getElementById("grid");
+
     async function load(){
-        const {category,page,size} = state;
         try{
-            const data = await jget(API.list({category, page, size}));
-            listEl.innerHTML = data.content.map(card).join("") || `<div class="center help">게시글이 없습니다.</div>`;
-            root.querySelector("#page-indicator").textContent = `page ${data.page+1} / ${Math.max(1,data.totalPages)} (총 ${data.totalElements})`;
-            root.querySelector("#btn-prev").disabled = data.page<=0;
-            root.querySelector("#btn-next").disabled = data.page+1 >= Math.max(1,data.totalPages);
+            const data = await jget(API.list({
+                category: state.category || undefined,
+                page: state.page, size: state.size, sort: state.sort
+            }));
+            let items = data.content;
+            if (state.q) {
+                const q = state.q.toLowerCase();
+                items = items.filter(p =>
+                    (p.name||"").toLowerCase().includes(q) || (p.address||"").toLowerCase().includes(q)
+                );
+            }
+            grid.innerHTML = items.map(card).join("") || `<div class="center muted">조건에 맞는 가맹점이 없습니다.</div>`;
+            renderPager(data.totalPages, data.page);
+
+            // 하트
+            grid.querySelectorAll("button[data-like]").forEach(btn=>{
+                btn.addEventListener("click", async ()=>{
+                    const id = Number(btn.dataset.id);
+                    if(!id) return;
+                    btn.disabled = true;
+                    try{
+                        const r = await jpost(API.like(id), {});
+                        btn.querySelector(".cnt").textContent = r.likeCount;
+                        btn.classList.add("liked");
+                    }catch(e){
+                        alert("좋아요 실패:\n" + e.message);
+                        btn.disabled = false;
+                    }
+                });
+            });
         }catch(e){
-            alert("목록 불러오기 실패:\n" + e.message);
+            grid.innerHTML = `<div class="center muted">목록을 불러오지 못했습니다.<br/>${esc(e.message)}</div>`;
         }
     }
+
+    function initials(name){
+        const s = (name||"").trim();
+        if (!s) return "MIN";
+        return s.length<=2 ? s : s.slice(0,2);
+    }
+
     function card(p){
-        const img = p.imgUrl ? `<img src="${esc(p.imgUrl)}" alt="">` : `<div class="thumb">이미지 없음</div>`;
+        const thumb = p.imgUrl
+            ? `<div class="thumb"><img src="${esc(p.imgUrl)}" alt=""></div>`
+            : `<div class="thumb">${esc(initials(p.name))}</div>`;
         return `
       <div class="card">
-        ${img}
+        <div class="thumb-wrap" style="position:relative">
+          ${thumb}
+          <div class="avatar">🐶</div>
+          <button class="likebtn" data-like data-id="${p.id}" title="좋아요">
+            <span class="heart">❤️</span><span class="cnt">${p.likeCount}</span>
+          </button>
+        </div>
         <div class="body">
-          <div class="kv"><b>${esc(p.name)}</b></div>
-          <div class="kv">분류: ${esc(catLabel(p.category))}</div>
-          <div class="kv help">${esc(p.address||"")}</div>
-          <div class="kv help">${esc(p.createdAtFormatted||"")}</div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <button class="btn heart" data-like data-id="${p.id}" title="좋아요">
-              <i class="icon">❤️</i><span class="cnt">${p.likeCount}</span>
-            </button>
-            <a class="btn" href="#/post/${p.id}">상세보기</a>
+          <div class="name">${esc(p.name)}</div>
+          <div class="meta">
+            <span class="muted">${esc(p.address||"")}</span>
+            <a href="#/post/${p.id}" class="btn">상세보기</a>
+          </div>
+          <div class="meta" style="margin-top:6px">
+            <span class="cat">${esc(catLabel(p.category))}</span>
+            <span class="muted">${esc(p.createdAtFormatted||"")}</span>
           </div>
         </div>
-      </div>`;
+      </div>
+    `;
     }
+
+    function renderPager(totalPages, page){
+        const wrap = document.getElementById("pager");
+        const tp = Math.max(1, totalPages);
+        const cur = page + 1;
+        let start = Math.max(1, cur-2);
+        let end   = Math.min(tp, start+4);
+        start = Math.max(1, end-4);
+
+        let html = '';
+        html += `<span class="page ${cur===1?'muted':''}" data-gop="first">«</span>`;
+        html += `<span class="page ${cur===1?'muted':''}" data-gop="prev">‹</span>`;
+        for (let i=start;i<=end;i++){
+            html += `<span class="page ${i===cur?'active':''}" data-page="${i-1}">${i}</span>`;
+        }
+        html += `<span class="page ${cur===tp?'muted':''}" data-gop="next">›</span>`;
+        html += `<span class="page ${cur===tp?'muted':''}" data-gop="last">»</span>`;
+        wrap.innerHTML = html;
+
+        wrap.querySelectorAll(".page").forEach(el=>{
+            el.addEventListener("click", ()=>{
+                if (el.dataset.page){ state.page = Number(el.dataset.page); load(); return; }
+                const g = el.dataset.gop;
+                if (g==="first") state.page = 0;
+                if (g==="prev")  state.page = Math.max(0, state.page-1);
+                if (g==="next")  state.page = state.page+1;
+                if (g==="last")  state.page = tp-1;
+                load();
+            });
+        });
+    }
+
     load();
 }
 
+// ===== Detail View (댓글 포함) =====
 async function renderDetail(root, id){
-    root.innerHTML = `<div class="panel"><div id="detail">불러오는 중…</div></div>`;
-    try {
-        const data = await jget(API.detail(id));
-        const likedClass = data.liked ? "liked" : "";
-        const img = data.imgUrl ? `<img src="${esc(data.imgUrl)}" alt="" style="max-height:280px;object-fit:cover;border-radius:8px;border:1px solid #1e2732" />` : "";
-        root.querySelector("#detail").innerHTML = `
-      <div class="row" style="align-items:flex-start">
-        <div style="flex:2; min-width:280px">
-          <h2 style="margin:0 0 6px 0">${esc(data.name)}</h2>
-          <div class="kv">카테고리: <b>${esc(catLabel(data.category))}</b></div>
-          <div class="kv">주소: <b>${esc(data.address||"")}</b></div>
-          <div class="kv help">${esc(data.createdAtFormatted||"")}</div>
-          <div class="hr"></div>
-          <p style="white-space:pre-wrap; line-height:1.5">${esc(data.content||"")}</p>
-          <div class="hr"></div>
-          <div class="like ${likedClass}">
-            <i class="icon">❤️</i>
-            <button id="btn-like" class="btn primary">${data.liked?"이미 좋아요":"좋아요"}</button>
-            <span id="like-count" class="badge">like: ${data.likeCount}</span>
-            <a class="btn" style="margin-left:auto" href="#/">← 목록</a>
-          </div>
-        </div>
-        <div style="flex:1; min-width:260px">${img}</div>
+    root.innerHTML = `<section class="panel"><div id="detail" style="padding:18px">불러오는 중…</div></section>`;
+    try{
+        const d = await jget(API.detail(id));
+        const img = d.imgUrl ? `<img src="${esc(d.imgUrl)}" alt="" style="max-width:100%;border-radius:12px;border:1px solid var(--line)"/>` : '';
+        document.getElementById("detail").innerHTML = `
+      <h2 style="margin:0 0 8px">${esc(d.name)}</h2>
+      <div class="muted" style="margin-bottom:6px">${esc(catLabel(d.category))} · ${esc(d.createdAtFormatted||"")}</div>
+      <div class="muted" style="margin-bottom:14px">${esc(d.address||"")}</div>
+      ${img}
+      <div style="margin:14px 0">
+        <button id="btn-like" class="btn solid">${d.liked?"이미 좋아요":"좋아요"}</button>
+        <span id="like-count" class="cat">like: ${d.likeCount}</span>
+        <a class="btn" href="#/">← 목록</a>
       </div>
+      <p style="white-space:pre-wrap;line-height:1.6">${esc(d.content||"")}</p>
 
-      <div class="hr"></div>
+      <div style="height:1px;background:var(--line);margin:18px 0"></div>
 
       <section id="comments">
-        <h3 style="margin: 0 0 8px">댓글</h3>
-        <form id="form-comment" class="row" style="margin-bottom:8px">
-          <textarea class="textarea" id="comment-content" placeholder="댓글을 입력하세요" required></textarea>
-          <button class="btn ok" type="submit" style="min-width:120px">등록</button>
+        <h3 style="margin:0 0 10px">댓글</h3>
+        <form id="form-comment" style="display:flex;gap:8px;align-items:flex-start;margin:6px 0 12px">
+          <textarea id="comment-content" class="search-input" placeholder="댓글을 입력하세요" required style="flex:1;min-height:80px"></textarea>
+          <button class="btn solid" type="submit" style="height:40px">등록</button>
         </form>
-        <div id="comment-list" class="panel"></div>
-        <div class="pager">
-          <button class="btn" id="c-prev">이전</button>
-          <div id="c-page" class="help"></div>
-          <button class="btn" id="c-next">다음</button>
-        </div>
+        <div id="comment-list"></div>
+        <div class="pager" id="c-pager"></div>
       </section>
     `;
 
-        // 좋아요(상세)
-        const btnLike = root.querySelector("#btn-like");
-        const likeBadge = root.querySelector("#like-count");
-        btnLike.addEventListener("click", async () => {
-            try {
+        // 좋아요
+        const btn = document.getElementById("btn-like");
+        const badge = document.getElementById("like-count");
+        if (d.liked) btn.disabled = true;
+        btn.addEventListener("click", async ()=>{
+            try{
                 const r = await jpost(API.like(id), {});
-                likeBadge.textContent = `like: ${r.likeCount}`;
-                btnLike.textContent = "이미 좋아요";
-                btnLike.disabled = true;
-            } catch(e){ alert("좋아요 실패:\n"+e.message); }
+                badge.textContent = `like: ${r.likeCount}`;
+                btn.textContent   = "이미 좋아요";
+                btn.disabled = true;
+            }catch(e){ alert(e.message); }
         });
-        if (data.liked) { btnLike.disabled = true; }
 
-        // 댓글 (생략 없이 기존 로직 그대로)
-        const state = { page:0, size:10 };
-        root.querySelector("#form-comment").addEventListener("submit", async (ev)=>{
+        // ===== 댓글 로직 =====
+        const cState = { page:0, size:10 };
+        const form = document.getElementById("form-comment");
+        form.addEventListener("submit", async (ev)=>{
             ev.preventDefault();
-            const content = root.querySelector("#comment-content").value.trim();
+            const content = document.getElementById("comment-content").value.trim();
             if (!content) return;
-            try {
+            try{
                 await jpost(API.comments.create(id), {content});
-                root.querySelector("#comment-content").value = "";
-                state.page = 0;
+                document.getElementById("comment-content").value = "";
+                cState.page = 0; // 최신으로
                 await loadComments();
-            } catch(e){ alert("댓글 등록 실패:\n"+e.message); }
+            }catch(e){ alert("댓글 등록 실패:\n" + e.message); }
         });
-        root.querySelector("#c-prev").addEventListener("click", ()=>{ state.page=Math.max(0,state.page-1); loadComments(); });
-        root.querySelector("#c-next").addEventListener("click", ()=>{ state.page=state.page+1; loadComments(); });
 
         async function loadComments(){
             try{
-                const data = await jget(API.comments.list(id, state.page, state.size));
-                const box = root.querySelector("#comment-list");
-                box.innerHTML = data.content.map(c=>{
-                    return `<div class="row" style="justify-content:space-between; align-items:flex-start; padding:6px 0; border-bottom:1px dashed #203044">
+                const data = await jget(API.comments.list(id, cState.page, cState.size));
+                const box = document.getElementById("comment-list");
+                box.innerHTML = data.content.map(c => `
+          <div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px dashed var(--line)">
             <div style="white-space:pre-wrap">${esc(c.content)}</div>
-            <div class="help">${esc(c.createdAtFormatted||"")}</div>
-          </div>`;
-                }).join("") || `<div class="center help">댓글이 없습니다.</div>`;
-                root.querySelector("#c-page").textContent = `page ${data.page+1} / ${Math.max(1,data.totalPages)} (총 ${data.totalElements})`;
-                root.querySelector("#c-prev").disabled = data.page<=0;
-                root.querySelector("#c-next").disabled = data.page+1 >= Math.max(1,data.totalPages);
+            <div class="muted" style="white-space:nowrap">${esc(c.createdAtFormatted||"")}</div>
+          </div>
+        `).join("") || `<div class="center muted">첫 댓글을 남겨보세요.</div>`;
+
+                // 페이저
+                const tp = Math.max(1, data.totalPages);
+                const cur = data.page + 1;
+                let start = Math.max(1, cur-2);
+                let end   = Math.min(tp, start+4);
+                start = Math.max(1, end-4);
+                const wrap = document.getElementById("c-pager");
+                let html = '';
+                html += `<span class="page ${cur===1?'muted':''}" data-gop="first">«</span>`;
+                html += `<span class="page ${cur===1?'muted':''}" data-gop="prev">‹</span>`;
+                for (let i=start;i<=end;i++){
+                    html += `<span class="page ${i===cur?'active':''}" data-page="${i-1}">${i}</span>`;
+                }
+                html += `<span class="page ${cur===tp?'muted':''}" data-gop="next">›</span>`;
+                html += `<span class="page ${cur===tp?'muted':''}" data-gop="last">»</span>`;
+                wrap.innerHTML = html;
+
+                wrap.querySelectorAll(".page").forEach(el=>{
+                    el.addEventListener("click", ()=>{
+                        if (el.dataset.page){ cState.page = Number(el.dataset.page); loadComments(); return; }
+                        const g = el.dataset.gop;
+                        if (g==="first") cState.page = 0;
+                        if (g==="prev")  cState.page = Math.max(0, cState.page-1);
+                        if (g==="next")  cState.page = cState.page+1;
+                        if (g==="last")  cState.page = tp-1;
+                        loadComments();
+                    });
+                });
             }catch(e){
-                alert("댓글 불러오기 실패:\n"+e.message);
+                document.getElementById("comment-list").innerHTML =
+                    `<div class="center muted">댓글을 불러오지 못했습니다.<br/>${esc(e.message)}</div>`;
             }
         }
         loadComments();
 
-    } catch(e){
-        root.innerHTML = `<div class="panel"><div class="center">상세 불러오기 실패<br/><span class="help">${e.message}</span></div></div>`;
+    }catch(e){
+        document.getElementById("detail").innerHTML = `<div class="muted">상세 불러오기 실패<br/>${esc(e.message)}</div>`;
     }
 }
 
+// ===== New View (JSON 방식) =====
 function renderNew(root){
     root.innerHTML = `
-    <div class="panel">
-      <h2 style="margin:0 0 8px">게시글 작성</h2>
-      <form id="form-new" class="row">
-        <label style="flex:1; min-width:220px">
-          <div class="help">카테고리</div>
-          <select id="n-category" class="select" required>
+    <section class="panel" style="padding:18px">
+      <h2 style="margin:0 0 10px">게시글 작성</h2>
+      <form id="form-new" class="row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <label>카테고리
+          <select id="n-category" class="search-input" required>
             <option value="" disabled selected>선택하세요</option>
-            ${Object.keys(CATEGORY_LABELS).map(c=>`<option value="${c}">${catLabel(c)}</option>`).join("")}
+            ${CAT_KEYS.map(c=>`<option value="${c}">${esc(CATEGORY_LABELS[c])}</option>`).join("")}
           </select>
         </label>
-        <label style="flex:1; min-width:280px">
-          <div class="help">가게 이름</div>
-          <input id="n-name" class="input" required maxlength="100" />
-        </label>
-        <label style="flex:2; min-width:320px">
-          <div class="help">주소</div>
-          <input id="n-address" class="input" required maxlength="255" />
-        </label>
-        <label style="flex:1 1 100%">
-          <div class="help">설명/홍보글</div>
-          <textarea id="n-content" class="textarea" required></textarea>
-        </label>
-        <label style="flex:1 1 100%">
-          <div class="help">대표 이미지 URL (선택)</div>
-          <input id="n-img" class="input" maxlength="512" placeholder="https://..." />
-        </label>
-        <div style="width:100%; display:flex; gap:8px; justify-content:flex-end">
+        <label>가게 이름<input id="n-name" class="search-input" required maxlength="100"/></label>
+        <label style="grid-column:1/3">주소<input id="n-address" class="search-input" required maxlength="255"/></label>
+        <label style="grid-column:1/3">설명<textarea id="n-content" class="search-input" style="min-height:120px" required></textarea></label>
+        <label style="grid-column:1/3">대표 이미지 URL(선택)<input id="n-img" class="search-input" placeholder="https://..."/></label>
+        <div style="grid-column:1/3;display:flex;gap:8px;justify-content:flex-end">
           <a class="btn" href="#/">취소</a>
-          <button class="btn primary" type="submit">등록</button>
+          <button class="btn solid" type="submit">등록</button>
         </div>
       </form>
-    </div>
+    </section>
   `;
-    root.querySelector("#form-new").addEventListener("submit", async (ev)=>{
+    document.getElementById("form-new").addEventListener("submit", async (ev)=>{
         ev.preventDefault();
         const payload = {
-            category: val("#n-category"),
-            name:     val("#n-name"),
-            address:  val("#n-address"),
-            content:  val("#n-content"),
-            imgUrl:   val("#n-img")
+            category: v("#n-category"),
+            name:     v("#n-name"),
+            address:  v("#n-address"),
+            content:  v("#n-content"),
+            imgUrl:   v("#n-img")
         };
         try{
             const r = await jpost(API.create(), payload);
@@ -317,6 +381,3 @@ function renderNew(root){
         }
     });
 }
-
-function esc(s){ return String(s ?? "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-function val(sel){ return document.querySelector(sel).value.trim(); }
