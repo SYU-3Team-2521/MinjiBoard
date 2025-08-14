@@ -44,4 +44,3 @@ public class CommentController {
                 .body(Map.of("id", id));
     }
 }
-//ㅁㄴㅇㅁㄴㅇㅁㄴㅇㅁㄴㅇㅁㄴㅇㅁㄴㅇ
