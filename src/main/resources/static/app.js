@@ -45,11 +45,16 @@ async function jpost(url, body){
     if(!r.ok) throw await toErr(r);
     return r.json();
 }
-async function toErr(res){
-    let m = `${res.status} ${res.statusText}`;
-    try { const j = await res.json(); m += `\n${j.code||""} ${j.message||""}`; } catch(_){}
-    return new Error(m);
+
+async function toErr(res) {
+    try {
+        const j = await res.json();
+        if (j && j.message) return new Error(j.message); // 한글 메시지 우선
+    } catch (_) { /* ignore */
+    }
+    return new Error(`${res.status} ${res.statusText}`);
 }
+
 function esc(s){ return String(s??"").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function v(sel){ return document.querySelector(sel).value.trim(); }
 
