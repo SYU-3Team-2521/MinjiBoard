@@ -19,6 +19,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/posts")
@@ -27,7 +28,6 @@ public class PostCommandController {
 
     private final PostCommandService postCommandService;
 
-    // 환경별 쿠키 설정
     @Value("${app.cookies.secure:true}")
     private boolean cookieSecure;
     @Value("${app.cookies.same-site:Lax}")
@@ -42,24 +42,22 @@ public class PostCommandController {
     }
 
     @PostMapping("/{id}/like")
-    public ResponseEntity<LikeResponseDto> like(
-            @PathVariable Long id,
-            HttpServletRequest request
-    ) {
-        // 1) 쿠키 읽어서 중복 여부 판단
+    public ResponseEntity<LikeResponseDto> like(@PathVariable Long id, HttpServletRequest request) {
+        // 1) 쿠키에서 이미 눌렀는지 확인
         Set<Long> liked = readLikedCookie(request);
-        boolean already = liked.contains(id);
-        if (already) {
-            // ★ 요구 메시지로 에러 처리
+        if (liked.contains(id)) {
             throw new DuplicateLikeException("이미 좋아요를 누르셨습니다. (게시물 당 좋아요 1개까지 가능합니다)");
         }
 
         // 2) 서비스 호출(+1)
         LikeResponseDto resp = postCommandService.like(id, false);
 
-        // 3) 쿠키 갱신 (id 추가)
+        // 3) 쿠키 갱신 (RFC6265 안전 문자만 사용: 구분자 ':' 사용)
         liked.add(id);
-        String newVal = String.join(",", liked.stream().map(String::valueOf).toList());
+        String newVal = liked.stream()
+                .map(String::valueOf)
+                .collect(Collectors.joining(":")); // ← 콜론으로 직렬화(공백·콤마 금지)
+
         ResponseCookie cookie = ResponseCookie.from("likedPosts", newVal)
                 .httpOnly(true)
                 .secure(cookieSecure)
@@ -73,16 +71,20 @@ public class PostCommandController {
                 .body(resp);
     }
 
+    /** likedPosts 쿠키 읽기: 콜론(:) 우선, 과거 콤마(,)도 허용해 마이그레이션 */
     private Set<Long> readLikedCookie(HttpServletRequest request) {
         Set<Long> set = new LinkedHashSet<>();
         if (request.getCookies() == null) return set;
+
         for (Cookie c : request.getCookies()) {
             if (!"likedPosts".equals(c.getName())) continue;
             String val = c.getValue();
             if (val == null || val.isBlank()) return set;
-            for (String token : val.split(",")) {
-                try { if (!token.isBlank()) set.add(Long.parseLong(token.trim())); }
-                catch (NumberFormatException ignored) {}
+            // 콜론/콤마 모두 분리자로 허용
+            for (String token : val.split("[:,]")) {
+                try {
+                    if (!token.isBlank()) set.add(Long.parseLong(token.trim()));
+                } catch (NumberFormatException ignored) { /* 무시 */ }
             }
         }
         return set;
