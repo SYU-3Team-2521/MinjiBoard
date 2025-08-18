@@ -3,7 +3,7 @@ const API = {
     list:   ({category, page=0, size=8, sort="likeCount,desc"}) =>
         `/api/posts?${toParams({category, page, size, sort})}`,
     detail: (id)   => `/api/posts/${id}`,
-    create: ()     => `/api/posts`,
+    create: ()     => `/api/posts`, // multipart only
     like:   (id)   => `/api/posts/${id}/like`,
     comments: {
         list:  (postId, page=0, size=10, sort="createdAt,desc") =>
@@ -45,23 +45,18 @@ async function jpost(url, body){
     if(!r.ok) throw await toErr(r);
     return r.json();
 }
-
-async function toErr(res) {
+async function toErr(res){
     try {
         const j = await res.json();
-        if (j && j.message) return new Error(j.message); // 한글 메시지 우선
-    } catch (_) { /* ignore */
-    }
+        if (j && j.message) return new Error(j.message);
+    } catch(_) {}
     return new Error(`${res.status} ${res.statusText}`);
 }
-
 function esc(s){ return String(s??"").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function v(sel){ return document.querySelector(sel).value.trim(); }
 
 // ===== Router =====
 window.addEventListener("hashchange", route);
-window.addEventListener("DOMContentLoaded", route);
-
 function route(){
     document.title = "민생-췍";
     const app = document.getElementById("app");
@@ -96,13 +91,12 @@ async function renderList(root){
 
     const state = { category:"", sort:"likeCount,desc", page:0, size:8, q:"" };
 
-    // 헤더 검색창 이벤트
+    // 헤더 검색
     const searchInput = document.getElementById("search-input");
     const searchBtn   = document.getElementById("search-btn");
     const applySearch = ()=>{
         state.q = (searchInput?.value||"").trim();
-        state.page = 0;
-        load();
+        state.page = 0; load();
     };
     searchBtn?.addEventListener("click", applySearch);
     searchInput?.addEventListener("keydown", (e)=>{ if(e.key==="Enter") applySearch(); });
@@ -144,7 +138,7 @@ async function renderList(root){
                     (p.name||"").toLowerCase().includes(q) || (p.address||"").toLowerCase().includes(q)
                 );
             }
-            grid.innerHTML = items.map(card).join("") || `<div class="center muted">조건에 맞는 가맹점이 없습니다.</div>`;
+            grid.innerHTML = items.map(card).join("") || `<div class="center muted" style="padding:24px">조건에 맞는 가맹점이 없습니다.</div>`;
             renderPager(data.totalPages, data.page);
 
             // 하트
@@ -158,13 +152,13 @@ async function renderList(root){
                         btn.querySelector(".cnt").textContent = r.likeCount;
                         btn.classList.add("liked");
                     }catch(e){
-                        alert("좋아요 실패:\n" + e.message);
+                        alert(e.message);
                         btn.disabled = false;
                     }
                 });
             });
         }catch(e){
-            grid.innerHTML = `<div class="center muted">목록을 불러오지 못했습니다.<br/>${esc(e.message)}</div>`;
+            grid.innerHTML = `<div class="center muted" style="padding:24px">목록을 불러오지 못했습니다.<br/>${esc(e.message)}</div>`;
         }
     }
 
@@ -280,19 +274,18 @@ async function renderDetail(root, id){
             }catch(e){ alert(e.message); }
         });
 
-        // ===== 댓글 로직 =====
+        // 댓글
         const cState = { page:0, size:10 };
-        const form = document.getElementById("form-comment");
-        form.addEventListener("submit", async (ev)=>{
+        document.getElementById("form-comment").addEventListener("submit", async (ev)=>{
             ev.preventDefault();
             const content = document.getElementById("comment-content").value.trim();
             if (!content) return;
             try{
                 await jpost(API.comments.create(id), {content});
                 document.getElementById("comment-content").value = "";
-                cState.page = 0; // 최신으로
+                cState.page = 0;
                 await loadComments();
-            }catch(e){ alert("댓글 등록 실패:\n" + e.message); }
+            }catch(e){ alert(e.message); }
         });
 
         async function loadComments(){
@@ -304,9 +297,8 @@ async function renderDetail(root, id){
             <div style="white-space:pre-wrap">${esc(c.content)}</div>
             <div class="muted" style="white-space:nowrap">${esc(c.createdAtFormatted||"")}</div>
           </div>
-        `).join("") || `<div class="center muted">첫 댓글을 남겨보세요.</div>`;
+        `).join("") || `<div class="center muted" style="padding:10px">첫 댓글을 남겨보세요.</div>`;
 
-                // 페이저
                 const tp = Math.max(1, data.totalPages);
                 const cur = data.page + 1;
                 let start = Math.max(1, cur-2);
@@ -336,7 +328,7 @@ async function renderDetail(root, id){
                 });
             }catch(e){
                 document.getElementById("comment-list").innerHTML =
-                    `<div class="center muted">댓글을 불러오지 못했습니다.<br/>${esc(e.message)}</div>`;
+                    `<div class="center muted" style="padding:10px">댓글을 불러오지 못했습니다.<br/>${esc(e.message)}</div>`;
             }
         }
         loadComments();
@@ -346,12 +338,13 @@ async function renderDetail(root, id){
     }
 }
 
-// ===== New View (JSON 방식) =====
+// ===== New View (파일 업로드만 지원, multipart) =====
 function renderNew(root){
     root.innerHTML = `
     <section class="panel" style="padding:18px">
       <h2 style="margin:0 0 10px">게시글 작성</h2>
-      <form id="form-new" class="row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <form id="form-new" class="row" enctype="multipart/form-data"
+            style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <label>카테고리
           <select id="n-category" class="search-input" required>
             <option value="" disabled selected>선택하세요</option>
@@ -361,7 +354,9 @@ function renderNew(root){
         <label>가게 이름<input id="n-name" class="search-input" required maxlength="100"/></label>
         <label style="grid-column:1/3">주소<input id="n-address" class="search-input" required maxlength="255"/></label>
         <label style="grid-column:1/3">설명<textarea id="n-content" class="search-input" style="min-height:120px" required></textarea></label>
-        <label style="grid-column:1/3">대표 이미지 URL(선택)<input id="n-img" class="search-input" placeholder="https://..."/></label>
+        <label style="grid-column:1/3">대표 이미지 파일(선택)
+          <input id="n-file" type="file" class="search-input" accept="image/*"/>
+        </label>
         <div style="grid-column:1/3;display:flex;gap:8px;justify-content:flex-end">
           <a class="btn" href="#/">취소</a>
           <button class="btn solid" type="submit">등록</button>
@@ -371,18 +366,30 @@ function renderNew(root){
   `;
     document.getElementById("form-new").addEventListener("submit", async (ev)=>{
         ev.preventDefault();
-        const payload = {
-            category: v("#n-category"),
-            name:     v("#n-name"),
-            address:  v("#n-address"),
-            content:  v("#n-content"),
-            imgUrl:   v("#n-img")
-        };
+        const fd = new FormData();
+        fd.append("category", v("#n-category"));
+        fd.append("name",     v("#n-name"));
+        fd.append("address",  v("#n-address"));
+        fd.append("content",  v("#n-content"));
+        const f = document.querySelector("#n-file").files[0];
+        if (f) fd.append("image", f);
+
         try{
-            const r = await jpost(API.create(), payload);
+            const res = await fetch(API.create(), { method:"POST", body: fd, credentials:"include" });
+            if (!res.ok) throw await toErr(res);
+            const r = await res.json();
             location.hash = `#/post/${r.id}`;
         }catch(e){
-            alert("등록 실패:\n" + e.message);
+            alert(e.message || "등록 실패");
         }
     });
 }
+
+// --- 안전 부트스트랩: DOM 상태와 무관하게 한 번은 route() 실행 ---
+(function bootstrap(){
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', route, { once: true });
+    } else {
+        route();
+    }
+})();
