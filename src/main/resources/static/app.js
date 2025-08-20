@@ -351,9 +351,9 @@ function renderNew(root){
             ${CAT_KEYS.map(c=>`<option value="${c}">${esc(CATEGORY_LABELS[c])}</option>`).join("")}
           </select>
         </label>
-        <label>가게 이름<input id="n-name" class="search-input" required maxlength="100"/></label>
+        <label>가게 이름<input id="n-name" class="search-input" required maxlength="20"/></label>
         <label style="grid-column:1/3">주소<input id="n-address" class="search-input" required maxlength="255"/></label>
-        <label style="grid-column:1/3">설명<textarea id="n-content" class="search-input" style="min-height:120px" required></textarea></label>
+        <label style="grid-column:1/3">설명<textarea id="n-content" class="search-input" style="min-height:120px" required maxlength="2000"></textarea></label>
         <label style="grid-column:1/3">대표 이미지 파일(선택)
           <input id="n-file" type="file" class="search-input" accept="image/*"/>
         </label>
