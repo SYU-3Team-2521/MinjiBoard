@@ -1,16 +1,20 @@
 package syu.likealion3.hackathon.exception;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.io.IOException;
 import java.util.NoSuchElementException;
@@ -31,6 +35,28 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ErrorResponse.of("NOT_FOUND",
                         ex.getMessage() == null ? "Resource not found" : ex.getMessage()));
+    }
+
+    /** 400: @RequestBody 누락/JSON 파싱 실패 */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadable(HttpMessageNotReadableException ex) {
+        return ResponseEntity.badRequest()
+                .body(ErrorResponse.of("BAD_REQUEST", "요청 본문(JSON)이 비었습니다."));
+    }
+
+    /** 404: 매핑/정적 리소스 없음 */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResource(NoResourceFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("NOT_FOUND", "요청하신 경로를 찾을 수 없습니다."));
+    }
+
+    /** 405: 메서드 미허용 */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ErrorResponse.of("METHOD_NOT_ALLOWED",
+                        "허용되지 않은 HTTP 메서드입니다. (" + ex.getMethod() + ")"));
     }
 
     @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class, IllegalArgumentException.class})
@@ -63,10 +89,10 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("DATA_INTEGRITY", "저장할 수 없습니다. 입력값을 확인해주세요."));
     }
 
-    /** 마지막 안전망: 서버 로그에 스택 출력 + 메시지 노출(개발환경 디버깅용) */
+    /** 마지막 안전망: 요청 컨텍스트 포함 로깅 + 500 반환 */
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleEtc(Exception ex) {
-        log.error("Unexpected error", ex);
+    public ResponseEntity<ErrorResponse> handleEtc(Exception ex, HttpServletRequest req) {
+        log.error("Unexpected error: {} {} -> {}", req.getMethod(), req.getRequestURI(), ex.getClass().getName(), ex);
         String msg = ex.getMessage();
         if (msg == null || msg.isBlank()) msg = "Internal server error";
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
