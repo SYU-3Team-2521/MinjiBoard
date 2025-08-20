@@ -1,6 +1,6 @@
 // ===== API & Utils =====
 const API = {
-    list:   ({category, page=0, size=8, sort="likeCount,desc"}) =>
+    list:   ({category, page=0, size=9, sort="likeCount,desc"}) =>
         `/api/posts?${toParams({category, page, size, sort})}`,
     detail: (id)   => `/api/posts/${id}`,
     create: ()     => `/api/posts`, // multipart only
@@ -89,7 +89,7 @@ async function renderList(root){
     </section>
   `;
 
-    const state = { category:"", sort:"likeCount,desc", page:0, size:8, q:"" };
+    const state = { category:"", sort:"likeCount,desc", page:0, size:9, q:"" };
 
     // 헤더 검색
     const searchInput = document.getElementById("search-input");
