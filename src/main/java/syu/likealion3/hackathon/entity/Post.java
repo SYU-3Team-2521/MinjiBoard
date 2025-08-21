@@ -32,7 +32,7 @@ public class Post {
     private Category category;
 
     /** 가게 이름 */
-    @Column(nullable = false, length = 100)
+    @Column(nullable = false, length = 20)
     private String name;
 
     /** 주소 */

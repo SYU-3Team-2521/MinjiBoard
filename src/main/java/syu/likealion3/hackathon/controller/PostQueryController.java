@@ -1,3 +1,4 @@
+// src/main/java/syu/likealion3/hackathon/controller/PostQueryController.java
 package syu.likealion3.hackathon.controller;
 
 import jakarta.servlet.http.Cookie;
@@ -27,7 +28,7 @@ public class PostQueryController {
     @GetMapping
     public ResponseEntity<PageResponse<PostListItemDto>> list(
             @RequestParam(name = "category", required = false) Category category,
-            @PageableDefault(page = 0, size = 10, sort = "likeCount", direction = Sort.Direction.DESC)
+            @PageableDefault(page = 0, size = 9, sort = "likeCount", direction = Sort.Direction.DESC)
             Pageable pageable
     ) {
         PageResponse<PostListItemDto> resp = postQueryService.getPosts(category, pageable);
@@ -44,6 +45,11 @@ public class PostQueryController {
         return ResponseEntity.ok(resp);
     }
 
+    /**
+     * likedPosts 쿠키 파싱
+     * - 구분자: 쉼표(,) 또는 콜론(:) 모두 허용
+     *   예) "1,2,3" 또는 "1:2:3"
+     */
     private Set<Long> parseLikedCookie(HttpServletRequest request) {
         Set<Long> set = new HashSet<>();
         if (request.getCookies() == null) return set;
@@ -51,9 +57,10 @@ public class PostQueryController {
             if (!"likedPosts".equals(c.getName())) continue;
             String val = c.getValue();
             if (val == null || val.isBlank()) return set;
-            for (String token : val.split(",")) {
-                try { if (!token.isBlank()) set.add(Long.parseLong(token.trim())); }
-                catch (NumberFormatException ignored) {}
+            for (String token : val.split("[:,]")) {
+                try {
+                    if (!token.isBlank()) set.add(Long.parseLong(token.trim()));
+                } catch (NumberFormatException ignored) {}
             }
         }
         return set;

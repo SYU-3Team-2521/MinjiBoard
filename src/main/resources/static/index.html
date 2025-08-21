@@ -6,21 +6,28 @@
     <title>민생-췍</title>
     <link rel="stylesheet" href="/styles.css" />
 </head>
-<body>
+<body class="light">
 <header class="topbar">
-    <div class="brand">민생-췍</div>
-    <nav>
-        <a href="#/" id="nav-list">목록</a>
-        <a href="#/new" id="nav-new">글쓰기</a>
+    <div class="brand"><span class="grad">민생-췍</span></div>
+
+    <div class="searchbar">
+        <input id="search-input" class="search-input" placeholder="노원구 민생 혜택 소비쿠폰 가맹점은?" />
+        <button id="search-btn" class="btn solid">검색</button>
+    </div>
+
+    <nav class="topnav">
+        <a href="#/" class="active">가맹점 목록</a>
+        <a href="javascript:void(0)" class="muted">찜한 매장</a>
+        <a href="javascript:void(0)" class="muted">로그인</a>
     </nav>
 </header>
 
-<main id="app" class="container">
-    <!-- JS에서 동적으로 렌더링 -->
-</main>
+<main id="app" class="container"></main>
+
+<a href="#/new" class="fab plus" title="글쓰기">＋</a>
 
 <footer class="footer">
-    <small>© 2025 LikeLion Hackathon · Backend: Spring Boot · DB: MySQL</small>
+    <small>© 2025 민생-췍 · Spring Boot + MySQL</small>
 </footer>
 
 <script defer src="/app.js"></script>
