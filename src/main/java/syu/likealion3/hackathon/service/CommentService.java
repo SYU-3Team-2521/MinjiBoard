@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import syu.likealion3.hackathon.dto.CommentCreateRequest;
 import syu.likealion3.hackathon.dto.CommentResponseDto;
+import syu.likealion3.hackathon.dto.CommentUpdateRequest;
 import syu.likealion3.hackathon.dto.PageResponse;
 import syu.likealion3.hackathon.entity.Comment;
 import syu.likealion3.hackathon.entity.Post;
@@ -46,4 +47,21 @@ public class CommentService {
         );
         return saved.getId();
     }
+
+    @Transactional
+    public void delete(Long postId, Long commentId) {
+        Comment c = commentRepository.findById(commentId)
+                .orElseThrow(() -> new NoSuchElementException("Comment not found"));
+        if (!c.getPost().getId().equals(postId)) throw new NoSuchElementException("Comment not in post");
+        commentRepository.delete(c);
+    }
+
+    @Transactional
+    public void update(Long postId, Long commentId, CommentUpdateRequest req) {
+        Comment c = commentRepository.findById(commentId)
+                .orElseThrow(() -> new NoSuchElementException("Comment not found"));
+        if (!c.getPost().getId().equals(postId)) throw new NoSuchElementException("Comment not in post");
+        c.update(req.content());
+    }
+
 }

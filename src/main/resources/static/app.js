@@ -4,11 +4,15 @@ const API = {
         `/api/posts?${toParams({category, page, size, sort})}`,
     detail: (id)   => `/api/posts/${id}`,
     create: ()     => `/api/posts`, // multipart only
+    update: (id)   => `/api/posts/${id}`, // PUT (json or multipart)
+    remove: (id)   => `/api/posts/${id}`, // DELETE
     like:   (id)   => `/api/posts/${id}/like`,
     comments: {
-        list:  (postId, page=0, size=10, sort="createdAt,desc") =>
+        list:   (postId, page=0, size=10, sort="createdAt,desc") =>
             `/api/posts/${postId}/comments?${toParams({page,size,sort})}`,
-        create:(postId) => `/api/posts/${postId}/comments`,
+        create: (postId) => `/api/posts/${postId}/comments`,
+        update: (postId, commentId) => `/api/posts/${postId}/comments/${commentId}`,
+        remove: (postId, commentId) => `/api/posts/${postId}/comments/${commentId}`,
     },
 };
 
@@ -45,6 +49,29 @@ async function jpost(url, body){
     if(!r.ok) throw await toErr(r);
     return r.json();
 }
+async function jput(url, body){
+    const r = await fetch(url, {
+        method:"PUT",
+        headers:{ "Content-Type":"application/json" },
+        credentials:"include",
+        body: JSON.stringify(body||{})
+    });
+    if(!r.ok) throw await toErr(r);
+    return (r.status===204) ? null : r.json();
+}
+async function jputMultipart(url, {payload, file}){
+    const fd = new FormData();
+    if (payload) fd.append("payload", new Blob([JSON.stringify(payload)], { type:"application/json" }));
+    if (file)    fd.append("image", file);
+    const r = await fetch(url, { method:"PUT", body: fd, credentials:"include" });
+    if(!r.ok) throw await toErr(r);
+    return (r.status===204) ? null : r.json();
+}
+async function jdel(url){
+    const r = await fetch(url, { method:"DELETE", credentials:"include" });
+    if(!r.ok) throw await toErr(r);
+    return null;
+}
 async function toErr(res){
     try {
         const j = await res.json();
@@ -62,8 +89,11 @@ function route(){
     const app = document.getElementById("app");
     const hash = location.hash || "#/";
 
-    if (hash.startsWith("#/new"))    return renderNew(app);
-    if (hash.startsWith("#/post/"))  return renderDetail(app, Number(hash.split("/")[2]));
+    if (hash.startsWith("#/new"))         return renderNew(app);
+    if (hash.startsWith("#/post/") && hash.endsWith("/edit")) {
+        const id = Number(hash.split("/")[2]); return renderEdit(app, id);
+    }
+    if (hash.startsWith("#/post/"))       return renderDetail(app, Number(hash.split("/")[2]));
     return renderList(app);
 }
 
@@ -241,10 +271,12 @@ async function renderDetail(root, id){
       <div class="muted" style="margin-bottom:6px">${esc(catLabel(d.category))} · ${esc(d.createdAtFormatted||"")}</div>
       <div class="muted" style="margin-bottom:14px">${esc(d.address||"")}</div>
       ${img}
-      <div style="margin:14px 0">
+      <div style="margin:14px 0; display:flex; gap:8px; flex-wrap:wrap">
         <button id="btn-like" class="btn solid">${d.liked?"이미 좋아요":"좋아요"}</button>
         <span id="like-count" class="cat">like: ${d.likeCount}</span>
         <a class="btn" href="#/">← 목록</a>
+        <a class="btn" href="#/post/${id}/edit">수정</a>
+        <button id="btn-delete" class="btn danger">삭제</button>
       </div>
       <p style="white-space:pre-wrap;line-height:1.6">${esc(d.content||"")}</p>
 
@@ -274,6 +306,15 @@ async function renderDetail(root, id){
             }catch(e){ alert(e.message); }
         });
 
+        // 삭제
+        document.getElementById("btn-delete").addEventListener("click", async ()=>{
+            if (!confirm("정말 삭제할까요?")) return;
+            try{
+                await jdel(API.remove(id));
+                location.hash = "#/";
+            }catch(e){ alert(e.message); }
+        });
+
         // 댓글
         const cState = { page:0, size:10 };
         document.getElementById("form-comment").addEventListener("submit", async (ev)=>{
@@ -295,10 +336,39 @@ async function renderDetail(root, id){
                 box.innerHTML = data.content.map(c => `
           <div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px dashed var(--line)">
             <div style="white-space:pre-wrap">${esc(c.content)}</div>
-            <div class="muted" style="white-space:nowrap">${esc(c.createdAtFormatted||"")}</div>
+            <div class="muted" style="white-space:nowrap; display:flex; align-items:center; gap:8px">
+              <span>${esc(c.createdAtFormatted||"")}</span>
+              <button class="btn xsmall" data-c-edit="${c.id}">수정</button>
+              <button class="btn xsmall danger" data-c-del="${c.id}">삭제</button>
+            </div>
           </div>
         `).join("") || `<div class="center muted" style="padding:10px">첫 댓글을 남겨보세요.</div>`;
 
+                // 댓글 수정/삭제 핸들러
+                box.querySelectorAll("[data-c-edit]").forEach(b=>{
+                    b.addEventListener("click", async ()=>{
+                        const cid = Number(b.dataset.cEdit);
+                        const cur = b.closest("div").previousElementSibling?.textContent || "";
+                        const next = prompt("댓글 수정", cur);
+                        if (next==null) return;
+                        try{
+                            await jput(API.comments.update(id, cid), { content: next.trim() });
+                            await loadComments();
+                        }catch(e){ alert(e.message); }
+                    });
+                });
+                box.querySelectorAll("[data-c-del]").forEach(b=>{
+                    b.addEventListener("click", async ()=>{
+                        const cid = Number(b.dataset.cDel);
+                        if (!confirm("댓글을 삭제할까요?")) return;
+                        try{
+                            await jdel(API.comments.remove(id, cid));
+                            await loadComments();
+                        }catch(e){ alert(e.message); }
+                    });
+                });
+
+                // 댓글 페이저
                 const tp = Math.max(1, data.totalPages);
                 const cur = data.page + 1;
                 let start = Math.max(1, cur-2);
@@ -381,6 +451,66 @@ function renderNew(root){
             location.hash = `#/post/${r.id}`;
         }catch(e){
             alert(e.message || "등록 실패");
+        }
+    });
+}
+
+// ===== Edit View (이미지 교체 선택 가능) =====
+async function renderEdit(root, id){
+    root.innerHTML = `<section class="panel" style="padding:18px"><div>불러오는 중…</div></section>`;
+    let d;
+    try { d = await jget(API.detail(id)); }
+    catch(e){ root.innerHTML = `<section class="panel" style="padding:18px">불러오기 실패<br>${esc(e.message)}</section>`; return; }
+
+    root.innerHTML = `
+    <section class="panel" style="padding:18px">
+      <h2 style="margin:0 0 10px">게시글 수정</h2>
+      <form id="form-edit" class="row" enctype="multipart/form-data"
+            style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <label>카테고리
+          <select id="e-category" class="search-input" required>
+            ${CAT_KEYS.map(c=>`<option value="${c}" ${c===d.category?'selected':''}>${esc(CATEGORY_LABELS[c])}</option>`).join("")}
+          </select>
+        </label>
+        <label>가게 이름<input id="e-name" class="search-input" required maxlength="20" value="${esc(d.name)}"/></label>
+        <label style="grid-column:1/3">주소<input id="e-address" class="search-input" required maxlength="255" value="${esc(d.address||'')}"/></label>
+        <label style="grid-column:1/3">설명<textarea id="e-content" class="search-input" style="min-height:120px" required maxlength="2000">${esc(d.content||'')}</textarea></label>
+        <div style="grid-column:1/3">
+          <div class="muted" style="margin-bottom:6px">현재 이미지: ${d.imgUrl? `<a href="${esc(d.imgUrl)}" target="_blank">보기</a>` : '없음'}</div>
+          <label>새 이미지 파일(선택)
+            <input id="e-file" type="file" class="search-input" accept="image/*"/>
+          </label>
+        </div>
+        <div style="grid-column:1/3;display:flex;gap:8px;justify-content:flex-end">
+          <a class="btn" href="#/post/${id}">취소</a>
+          <button class="btn solid" type="submit">저장</button>
+        </div>
+      </form>
+    </section>
+  `;
+
+    document.getElementById("form-edit").addEventListener("submit", async (ev)=>{
+        ev.preventDefault();
+        const payload = {
+            category: v("#e-category"),
+            name:     v("#e-name"),
+            address:  v("#e-address"),
+            content:  v("#e-content"),
+            imgUrl:   null // 파일 없이 JSON만 보낼 때는 서버에서 기존 유지
+        };
+        const file = document.querySelector("#e-file").files[0];
+
+        try{
+            if (file) {
+                // 멀티파트 수정 (payload + image)
+                await jputMultipart(API.update(id), { payload, file });
+            } else {
+                // JSON 수정
+                await jput(API.update(id), payload);
+            }
+            location.hash = `#/post/${id}`;
+        }catch(e){
+            alert(e.message || "수정 실패");
         }
     });
 }

@@ -1,27 +1,28 @@
 spring:
-        config:
-                import: "optional:classpath:application-env.properties"
-        application:
-                name: hackathon
+  config:
+    import: "optional:classpath:application-env.properties"
+  application:
+    name: hackathon
 
-        datasource:
-                driver-class-name: com.mysql.cj.jdbc.Driver
-                url: jdbc:mysql://localhost:3306/testdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-                username: uichan
-                password: dmlcks01
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
 
-        jpa:
-                properties:
-                        hibernate:
-                                show_sql: true
-                                format_sql: true
-                hibernate:
-                        ddl-auto: update
-                        naming:
-                                implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
-                                physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
-                database-platform: org.hibernate.dialect.MySQLDialect
-        servlet:
-                multipart:
-                        max-file-size: 20MB
-                        max-request-size: 80MB
+  jpa:
+    properties:
+      hibernate:
+        show_sql: true
+        format_sql: true
+    hibernate:
+      ddl-auto: update
+      naming:
+        implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    database-platform: org.hibernate.dialect.MySQLDialect
+
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 80MB

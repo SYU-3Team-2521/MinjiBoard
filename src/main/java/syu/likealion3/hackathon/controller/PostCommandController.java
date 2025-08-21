@@ -37,11 +37,11 @@ public class PostCommandController {
     @Value("${app.cookies.max-age-days:30}")
     private int cookieMaxAgeDays;
 
-    /** ✅ 멀티파트(파일 첨부)만 허용 */
+    /** ✅ 생성: 멀티파트(파일 첨부) 허용 */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<PostCreateResponse> create(
             @Valid @ModelAttribute PostCreateForm form,
-            @RequestPart(name = "image", required = false) MultipartFile image // 이미지 필수로 바꾸려면 required=true
+            @RequestPart(name = "image", required = false) MultipartFile image
     ) throws Exception {
         String imgUrl = (image != null && !image.isEmpty())
                 ? fileStorageService.saveImage(image)
@@ -54,7 +54,7 @@ public class PostCommandController {
         return ResponseEntity.created(URI.create("/api/posts/" + resp.id())).body(resp);
     }
 
-    /** 좋아요 (쿠키로 중복 방지, RFC6265-safe 직렬화) */
+    /** ✅ 좋아요 (쿠키로 중복 방지, RFC6265-safe 직렬화) */
     @PostMapping("/{id}/like")
     public ResponseEntity<LikeResponseDto> like(@PathVariable Long id, HttpServletRequest request) {
         Set<Long> liked = readLikedCookie(request);
@@ -74,6 +74,48 @@ public class PostCommandController {
         return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, cookie.toString()).body(resp);
     }
 
+    /** 수정: JSON 버전 */
+    @PutMapping(path = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Void> updateJson(
+            @PathVariable Long id,
+            @Valid @RequestBody PostUpdateRequest req
+    ) {
+        postCommandService.update(id, req);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * 수정: 멀티파트 버전
+     */
+    @PutMapping(path = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Void> updateMultipart(
+            @PathVariable Long id,
+            @RequestPart("payload") @Valid PostUpdateRequest payload,
+            @RequestPart(name = "image", required = false) MultipartFile image
+    ) throws Exception {
+        String imgUrl = null;
+        if (image != null && !image.isEmpty()) {
+            imgUrl = fileStorageService.saveImage(image);
+            payload = new PostUpdateRequest(
+                    payload.category(),
+                    payload.name(),
+                    payload.address(),
+                    payload.content(),
+                    imgUrl
+            );
+        }
+        postCommandService.update(id, payload);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** ✅ 삭제 */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        postCommandService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ===== 내부 유틸 =====
     private Set<Long> readLikedCookie(HttpServletRequest request) {
         Set<Long> set = new LinkedHashSet<>();
         if (request.getCookies() == null) return set;
@@ -82,7 +124,9 @@ public class PostCommandController {
             String val = c.getValue();
             if (val == null || val.isBlank()) return set;
             for (String token : val.split("[:,]")) {
-                try { if (!token.isBlank()) set.add(Long.parseLong(token.trim())); } catch (NumberFormatException ignored) {}
+                try {
+                    if (!token.isBlank()) set.add(Long.parseLong(token.trim()));
+                } catch (NumberFormatException ignored) {}
             }
         }
         return set;

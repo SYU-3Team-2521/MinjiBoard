@@ -41,6 +41,8 @@ public class Comment {
         this.createdAt = createdAt;
     }
 
+    public void update(String content) { this.content = content; }
+
     @PrePersist
     void onCreate() {
         if (this.createdAt == null) this.createdAt = LocalDateTime.now();

@@ -64,13 +64,13 @@ public class Post {
                  String imgUrl,
                  Integer likeCount,
                  LocalDateTime createdAt) {
-        this.category = category;
+        this.category = category;//
         this.name = name;
         this.address = address;
-        this.content = content;
-        this.imgUrl = imgUrl;
-        this.likeCount = likeCount;
-        this.createdAt = createdAt;
+        this.content = content;//
+        this.imgUrl = imgUrl;//
+        this.likeCount = likeCount;//
+        this.createdAt = createdAt;//
     }
 
     /** 영속화 직전 기본값 처리 */
@@ -78,6 +78,16 @@ public class Post {
     protected void onCreate() {
         if (this.likeCount == null) this.likeCount = 0;
         if (this.createdAt == null) this.createdAt = LocalDateTime.now();
+    }
+
+    public void update(Category category, String name, String address, String content, String imgUrl) {
+        this.category = category;
+        this.name = name;
+        this.address = address;
+        this.content = content;
+        if (imgUrl != null && !imgUrl.isBlank()) {
+            this.imgUrl = imgUrl;
+        }
     }
 
     /** 좋아요 증가 (동시성 제어는 서비스/레포지토리에서 처리) */

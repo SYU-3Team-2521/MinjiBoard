@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import syu.likealion3.hackathon.dto.CommentCreateRequest;
 import syu.likealion3.hackathon.dto.CommentResponseDto;
+import syu.likealion3.hackathon.dto.CommentUpdateRequest;
 import syu.likealion3.hackathon.dto.PageResponse;
 import syu.likealion3.hackathon.service.CommentService;
 
@@ -32,6 +33,26 @@ public class CommentController {
         PageResponse<CommentResponseDto> resp = commentService.list(postId, pageable);
         return ResponseEntity.ok(resp);
     }
+
+    @PutMapping("/{commentId}")
+    public ResponseEntity<Void> update(
+            @PathVariable Long postId,
+            @PathVariable Long commentId,
+            @Valid @RequestBody CommentUpdateRequest req
+    ){
+        commentService.update(postId, commentId, req);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{commentId}")
+    public ResponseEntity<Void> delete(
+            @PathVariable Long postId,
+            @PathVariable Long commentId
+    ){
+        commentService.delete(postId, commentId);
+        return ResponseEntity.noContent().build();
+    }
+
 
     /** 댓글 작성 */
     @PostMapping

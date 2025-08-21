@@ -6,10 +6,13 @@ import org.springframework.transaction.annotation.Transactional;
 import syu.likealion3.hackathon.dto.LikeResponseDto;
 import syu.likealion3.hackathon.dto.PostCreateRequest;
 import syu.likealion3.hackathon.dto.PostCreateResponse;
+import syu.likealion3.hackathon.dto.PostUpdateRequest;
 import syu.likealion3.hackathon.entity.Post;
 import syu.likealion3.hackathon.repository.PostRepository;
 
 import java.util.NoSuchElementException;
+
+import static java.time.LocalDateTime.now;
 
 @Service
 @RequiredArgsConstructor
@@ -26,11 +29,24 @@ public class PostCommandService {
                 .content(req.content())
                 .imgUrl(req.imgUrl())
                 .likeCount(0)
-                .createdAt(null)
+                .createdAt(now())
                 .build();
 
         Long id = postRepository.save(post).getId();
         return new PostCreateResponse(id);
+    }
+
+    @Transactional
+    public void update(Long id, PostUpdateRequest req) {
+        Post p = postRepository.findById(id).orElseThrow(() -> new NoSuchElementException("Post not found"));
+        p.update(req.category(), req.name(), req.address(), req.content(), req.imgUrl());
+        // JPA dirty checking으로 자동 flush
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        if (!postRepository.existsById(id)) throw new NoSuchElementException("Post not found");
+        postRepository.deleteById(id);
     }
 
     @Transactional
