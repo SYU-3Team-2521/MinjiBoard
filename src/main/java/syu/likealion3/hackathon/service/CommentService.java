@@ -66,7 +66,12 @@ public class CommentService {
         if (req.pin() != null && !req.pin().isBlank()) {
             c.setPinComment(passwordEncoder.encode(req.pin()));
         }
+        else{
+            c.setPinComment(passwordEncoder.encode("000000"));
+        }
 
+        //
+        
         String tokenPlain = SecurityUtil.generateTokenBase64Url();
         c.setTokenHashComment(SecurityUtil.sha256(tokenPlain));
 
