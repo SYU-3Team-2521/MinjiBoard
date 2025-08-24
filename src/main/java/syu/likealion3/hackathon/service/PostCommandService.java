@@ -65,7 +65,7 @@ public class PostCommandService {
             post.setPinPost(passwordEncoder.encode(req.pin()));
         }
         else{
-            post.setPinComment(passwordEncoder.encode("000000"));
+            post.setPinPost(passwordEncoder.encode("000000"));
         }
 
         // 소유 토큰: 원본 생성 → 해시 저장
