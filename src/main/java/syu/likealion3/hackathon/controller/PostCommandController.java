@@ -37,7 +37,7 @@ public class PostCommandController {
     @Value("${app.cookies.max-age-days:30}")
     private int cookieMaxAgeDays;
 
-    /** ✅ 생성: 멀티파트(파일 첨부) 허용 */
+    /** ✅ 생성: 멀티파트(파일 첨부) 허용 + 폼의 pin 그대로 사용 */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<PostCreateResponse> create(
             @Valid @ModelAttribute PostCreateForm form,
@@ -47,11 +47,26 @@ public class PostCommandController {
                 ? fileStorageService.saveImage(image)
                 : null;
 
+        // 폼의 pin 그대로 전달
         PostCreateRequest req = new PostCreateRequest(
-                form.category(), form.name(), form.address(), form.content(), imgUrl
+                form.category(), form.name(), form.address(), form.content(), imgUrl, form.pin()
         );
+
         PostCreateResponse resp = postCommandService.create(req);
-        return ResponseEntity.created(URI.create("/api/posts/" + resp.id())).body(resp);
+
+        // 동일 브라우저 원클릭을 위한 소유자 쿠키 발급
+        ResponseCookie owner = ResponseCookie.from("post_owner_" + resp.id(), resp.tokenPlain())
+                .httpOnly(true)
+                .secure(cookieSecure)          // 로컬 HTTP 테스트면 false로
+                .sameSite(cookieSameSite)      // 운영은 "Strict" 권장
+                .path("/api/posts/" + resp.id())
+                .maxAge(Duration.ofDays(cookieMaxAgeDays))
+                .build();
+
+        return ResponseEntity.created(URI.create("/api/posts/" + resp.id()))
+                .header(HttpHeaders.SET_COOKIE, owner.toString())
+                // 본문에서는 tokenPlain 숨기고 id만 반환
+                .body(new PostCreateResponse(resp.id(), null));
     }
 
     /** ✅ 좋아요 (쿠키로 중복 방지, RFC6265-safe 직렬화) */
@@ -74,24 +89,26 @@ public class PostCommandController {
         return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, cookie.toString()).body(resp);
     }
 
-    /** 수정: JSON 버전 */
+    /** ✅ 수정: JSON 버전 (쿠키 실패 시 PIN 헤더로 검증) */
     @PutMapping(path = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Void> updateJson(
             @PathVariable Long id,
-            @Valid @RequestBody PostUpdateRequest req
+            @Valid @RequestBody PostUpdateRequest req,
+            @RequestHeader(value = "X-PIN", required = false) String pin,
+            HttpServletRequest httpReq
     ) {
-        postCommandService.update(id, req);
+        postCommandService.update(id, req, httpReq, pin);
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * 수정: 멀티파트 버전
-     */
+    /** ✅ 수정: 멀티파트 버전 (파일 교체 선택) */
     @PutMapping(path = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Void> updateMultipart(
             @PathVariable Long id,
             @RequestPart("payload") @Valid PostUpdateRequest payload,
-            @RequestPart(name = "image", required = false) MultipartFile image
+            @RequestPart(name = "image", required = false) MultipartFile image,
+            @RequestHeader(value = "X-PIN", required = false) String pin,
+            HttpServletRequest httpReq
     ) throws Exception {
         String imgUrl = null;
         if (image != null && !image.isEmpty()) {
@@ -104,14 +121,18 @@ public class PostCommandController {
                     imgUrl
             );
         }
-        postCommandService.update(id, payload);
+        postCommandService.update(id, payload, httpReq, pin);
         return ResponseEntity.noContent().build();
     }
 
-    /** ✅ 삭제 */
+    /** ✅ 삭제 (쿠키 실패 시 PIN 헤더로 검증) */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
-        postCommandService.delete(id);
+    public ResponseEntity<Void> delete(
+            @PathVariable Long id,
+            @RequestHeader(value = "X-PIN", required = false) String pin,
+            HttpServletRequest httpReq
+    ) {
+        postCommandService.delete(id, httpReq, pin);
         return ResponseEntity.noContent().build();
     }
 

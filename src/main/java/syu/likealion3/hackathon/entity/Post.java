@@ -3,6 +3,7 @@ package syu.likealion3.hackathon.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
+import org.hibernate.annotations.ColumnDefault;
 
 /**
  * 게시글 엔티티
@@ -39,6 +40,12 @@ public class Post {
     @Column(nullable = false, length = 255)
     private String address;
 
+    @Column(name = "pinPost", length = 100)
+    private String pinPost;
+
+    @Column(name = "token_hash_Post", columnDefinition = "BINARY(32)")
+    private byte[] tokenHashPost;
+
     /** 설명/홍보글 (긴 문장 가능) */
     @Lob
     @Column(nullable = false)
@@ -50,7 +57,7 @@ public class Post {
 
     /** 좋아요 수 */
     @Column(nullable = false)
-    private Integer likeCount;
+    private Integer likeCount = 0;
 
     /** 생성 시각 */
     @Column(nullable = false, updatable = false)
@@ -89,6 +96,11 @@ public class Post {
             this.imgUrl = imgUrl;
         }
     }
+
+    public void setPinPost(String pinPost) { this.pinPost = pinPost; }
+    public void setTokenHashPost(byte[] tokenHashPost) { this.tokenHashPost = tokenHashPost; }
+    public String getPinPost() { return pinPost; }
+    public byte[] getTokenHashPost() { return tokenHashPost; }
 
     /** 좋아요 증가 (동시성 제어는 서비스/레포지토리에서 처리) */
     public void incrementLike() {

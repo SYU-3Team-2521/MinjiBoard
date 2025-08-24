@@ -22,5 +22,7 @@ public record PostCreateRequest(
         String content,
 
         @Size(max = 512, message = "이미지 URL은 512자 이하여야 합니다")
-        String imgUrl
+        String imgUrl,
+
+        @Size(max = 100, message = "넘 많은 비번") String pin
 ) {}

@@ -34,44 +34,14 @@ function toParams(obj){
     });
     return sp.toString();
 }
-async function jget(url){
-    const r = await fetch(url, {credentials:"include"});
-    if(!r.ok) throw await toErr(r);
-    return r.json();
+
+// --- CSRF & PIN 공통 처리 ---
+function getCookie(name){
+    const m = document.cookie.match(new RegExp('(?:^|; )'+name+'=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : null;
 }
-async function jpost(url, body){
-    const r = await fetch(url, {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        credentials:"include",
-        body: JSON.stringify(body||{})
-    });
-    if(!r.ok) throw await toErr(r);
-    return r.json();
-}
-async function jput(url, body){
-    const r = await fetch(url, {
-        method:"PUT",
-        headers:{ "Content-Type":"application/json" },
-        credentials:"include",
-        body: JSON.stringify(body||{})
-    });
-    if(!r.ok) throw await toErr(r);
-    return (r.status===204) ? null : r.json();
-}
-async function jputMultipart(url, {payload, file}){
-    const fd = new FormData();
-    if (payload) fd.append("payload", new Blob([JSON.stringify(payload)], { type:"application/json" }));
-    if (file)    fd.append("image", file);
-    const r = await fetch(url, { method:"PUT", body: fd, credentials:"include" });
-    if(!r.ok) throw await toErr(r);
-    return (r.status===204) ? null : r.json();
-}
-async function jdel(url){
-    const r = await fetch(url, { method:"DELETE", credentials:"include" });
-    if(!r.ok) throw await toErr(r);
-    return null;
-}
+function getCsrf(){ return getCookie('csrf_token'); }
+
 async function toErr(res){
     try {
         const j = await res.json();
@@ -79,6 +49,85 @@ async function toErr(res){
     } catch(_) {}
     return new Error(`${res.status} ${res.statusText}`);
 }
+
+async function reqJSON(method, url, {body, pin, headers} = {}){
+    const h = Object.assign(
+        { "Content-Type":"application/json" },
+        headers || {}
+    );
+    const csrf = getCsrf();
+    if (csrf) h["X-CSRF-Token"] = csrf;
+    if (pin)  h["X-PIN"] = pin;
+
+    const r = await fetch(url, {
+        method,
+        headers: h,
+        credentials:"include",
+        body: body ? JSON.stringify(body) : undefined
+    });
+    if(!r.ok) throw await toErr(r);
+    return r.status===204 ? null : r.json();
+}
+
+// 403(Not owner) 대응: 핀 물어보고 한 번 재시도
+async function withPinRetry(fn){
+    try { return await fn(); }
+    catch(e){
+        // 메시지가 없는 403도 있을 수 있으니, 일단 한번 물어보고 재시도
+        if (String(e.message||"").includes("NOT_OWNER") || String(e.message||"").startsWith("403")) {
+            const pin = prompt("권한 확인을 위해 PIN(비밀번호)을 입력해 주세요.");
+            if (pin==null || pin.trim()==="") throw e;
+            return await fn(pin.trim());
+        }
+        throw e;
+    }
+}
+
+async function jget(url){
+    const r = await fetch(url, {
+        credentials:"include",
+        headers: (()=>{ const h={}; const c=getCsrf(); if(c) h["X-CSRF-Token"]=c; return h; })()
+    });
+    if(!r.ok) throw await toErr(r);
+    return r.json();
+}
+async function jpost(url, body){
+    // 변경요청이므로 CSRF 자동첨부 + 403 시 PIN 재시도
+    return withPinRetry((pin)=> reqJSON("POST", url, {body, pin}));
+}
+async function jput(url, body){
+    return withPinRetry((pin)=> reqJSON("PUT", url, {body, pin}));
+}
+async function jputMultipart(url, {payload, file}){
+    const fd = new FormData();
+    if (payload) fd.append("payload", new Blob([JSON.stringify(payload)], { type:"application/json" }));
+    if (file)    fd.append("image", file);
+    const h = {};
+    const csrf = getCsrf();
+    if (csrf) h["X-CSRF-Token"] = csrf;
+
+    // 멀티파트는 재시도 시 PIN 헤더만 추가해서 다시 보냄
+    return withPinRetry(async (pin)=>{
+        const h2 = Object.assign({}, h);
+        if (pin) h2["X-PIN"] = pin;
+        const r = await fetch(url, { method:"PUT", body: fd, credentials:"include", headers: h2 });
+        if(!r.ok) throw await toErr(r);
+        return (r.status===204) ? null : r.json();
+    });
+}
+async function jdel(url){
+    const h = {};
+    const csrf = getCsrf();
+    if (csrf) h["X-CSRF-Token"] = csrf;
+    return withPinRetry(async (pin)=>{
+        const h2 = Object.assign({}, h);
+        if (pin) h2["X-PIN"] = pin;
+        const r = await fetch(url, { method:"DELETE", credentials:"include", headers: h2 });
+        if(!r.ok) throw await toErr(r);
+        return null;
+    });
+}
+
 function esc(s){ return String(s??"").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function v(sel){ return document.querySelector(sel).value.trim(); }
 
@@ -286,6 +335,7 @@ async function renderDetail(root, id){
         <h3 style="margin:0 0 10px">댓글</h3>
         <form id="form-comment" style="display:flex;gap:8px;align-items:flex-start;margin:6px 0 12px">
           <textarea id="comment-content" class="search-input" placeholder="댓글을 입력하세요" required style="flex:1;min-height:80px"></textarea>
+          <input id="comment-pin" class="search-input" placeholder="PIN(선택)" style="width:140px" />
           <button class="btn solid" type="submit" style="height:40px">등록</button>
         </form>
         <div id="comment-list"></div>
@@ -306,7 +356,7 @@ async function renderDetail(root, id){
             }catch(e){ alert(e.message); }
         });
 
-        // 삭제
+        // 삭제 (403 시 PIN 한번 물어보고 재시도)
         document.getElementById("btn-delete").addEventListener("click", async ()=>{
             if (!confirm("정말 삭제할까요?")) return;
             try{
@@ -320,10 +370,12 @@ async function renderDetail(root, id){
         document.getElementById("form-comment").addEventListener("submit", async (ev)=>{
             ev.preventDefault();
             const content = document.getElementById("comment-content").value.trim();
+            const pinOpt  = document.getElementById("comment-pin").value.trim();
             if (!content) return;
             try{
-                await jpost(API.comments.create(id), {content});
+                await jpost(API.comments.create(id), {content, pin: pinOpt || undefined});
                 document.getElementById("comment-content").value = "";
+                // PIN은 쿠키 발급용이라 남겨둬도 됨(원하면 비워도 무방)
                 cState.page = 0;
                 await loadComments();
             }catch(e){ alert(e.message); }
@@ -344,7 +396,7 @@ async function renderDetail(root, id){
           </div>
         `).join("") || `<div class="center muted" style="padding:10px">첫 댓글을 남겨보세요.</div>`;
 
-                // 댓글 수정/삭제 핸들러
+                // 댓글 수정/삭제 핸들러 (403 시 PIN 재시도는 공통 유틸로 처리됨)
                 box.querySelectorAll("[data-c-edit]").forEach(b=>{
                     b.addEventListener("click", async ()=>{
                         const cid = Number(b.dataset.cEdit);
@@ -427,6 +479,9 @@ function renderNew(root){
         <label style="grid-column:1/3">대표 이미지 파일(선택)
           <input id="n-file" type="file" class="search-input" accept="image/*"/>
         </label>
+        <label style="grid-column:1/3">PIN(선택)
+          <input id="n-pin" class="search-input" placeholder="예: 6자리 이상 추천"/>
+        </label>
         <div style="grid-column:1/3;display:flex;gap:8px;justify-content:flex-end">
           <a class="btn" href="#/">취소</a>
           <button class="btn solid" type="submit">등록</button>
@@ -441,11 +496,16 @@ function renderNew(root){
         fd.append("name",     v("#n-name"));
         fd.append("address",  v("#n-address"));
         fd.append("content",  v("#n-content"));
+        const pin = v("#n-pin");
+        if (pin) fd.append("pin", pin);
         const f = document.querySelector("#n-file").files[0];
         if (f) fd.append("image", f);
 
         try{
-            const res = await fetch(API.create(), { method:"POST", body: fd, credentials:"include" });
+            // CSRF 헤더 추가
+            const headers = {};
+            const csrf = getCsrf(); if (csrf) headers["X-CSRF-Token"] = csrf;
+            const res = await fetch(API.create(), { method:"POST", body: fd, credentials:"include", headers });
             if (!res.ok) throw await toErr(res);
             const r = await res.json();
             location.hash = `#/post/${r.id}`;
@@ -502,10 +562,8 @@ async function renderEdit(root, id){
 
         try{
             if (file) {
-                // 멀티파트 수정 (payload + image)
                 await jputMultipart(API.update(id), { payload, file });
             } else {
-                // JSON 수정
                 await jput(API.update(id), payload);
             }
             location.hash = `#/post/${id}`;

@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 @Getter
 @ToString(exclude = "post")
@@ -23,6 +25,7 @@ public class Comment {
     /** 대상 게시글 */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "post_id", nullable = false)
+    @OnDelete(action = OnDeleteAction.CASCADE)
     private Post post;
 
     /** 댓글 내용 */
@@ -34,6 +37,12 @@ public class Comment {
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "pinComment", length = 100)
+    private String pinComment;
+
+    @Column(name = "token_hash_Comment", columnDefinition = "BINARY(32)")
+    private byte[] tokenHashComment;
+
     @Builder
     private Comment(Post post, String content, LocalDateTime createdAt) {
         this.post = post;
@@ -42,6 +51,11 @@ public class Comment {
     }
 
     public void update(String content) { this.content = content; }
+
+    public void setPinComment(String pinComment) { this.pinComment = pinComment; }
+    public void setTokenHashComment(byte[] tokenHashComment) { this.tokenHashComment = tokenHashComment; }
+    public String getPinComment() { return pinComment; }
+    public byte[] getTokenHashComment() { return tokenHashComment; }
 
     @PrePersist
     void onCreate() {

@@ -20,5 +20,7 @@ public record PostCreateForm(
 
         @NotBlank(message = "본문 내용은 필수입니다.")
         @Size(max = 2000, message = "본문 내용은 2000자 이하여야 합니다")
-        String content
+        String content,
+
+        @Size(max = 100, message = "넘 많은 비번") String pin
 ) {}
