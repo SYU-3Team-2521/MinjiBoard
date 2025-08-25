@@ -47,7 +47,7 @@ public class CorsConfig {
                                 "X-PIN",
                                 "Accept",
                                 "Origin",
-                                "Authorization" // 필요 없다면 제거 가능
+                                "Authorization"
                         )
 
                         // 노출 헤더(브라우저에서 읽을 수 있는 응답 헤더)

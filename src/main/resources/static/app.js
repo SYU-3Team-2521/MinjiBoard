@@ -375,7 +375,6 @@ async function renderDetail(root, id){
             try{
                 await jpost(API.comments.create(id), {content, pin: pinOpt || undefined});
                 document.getElementById("comment-content").value = "";
-                // PIN은 쿠키 발급용이라 남겨둬도 됨(원하면 비워도 무방)
                 cState.page = 0;
                 await loadComments();
             }catch(e){ alert(e.message); }
@@ -480,7 +479,7 @@ function renderNew(root){
           <input id="n-file" type="file" class="search-input" accept="image/*"/>
         </label>
         <label style="grid-column:1/3">PIN(선택)
-          <input id="n-pin" class="search-input" placeholder="예: 6자리 이상 추천"/>
+          <input id="n-pin" class="search-input" placeholder="미선택시 000000"/>
         </label>
         <div style="grid-column:1/3;display:flex;gap:8px;justify-content:flex-end">
           <a class="btn" href="#/">취소</a>

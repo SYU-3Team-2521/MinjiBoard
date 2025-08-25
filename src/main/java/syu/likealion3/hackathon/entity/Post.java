@@ -3,6 +3,9 @@ package syu.likealion3.hackathon.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+
 import org.hibernate.annotations.ColumnDefault;
 
 /**
@@ -84,7 +87,7 @@ public class Post {
     @PrePersist
     protected void onCreate() {
         if (this.likeCount == null) this.likeCount = 0;
-        if (this.createdAt == null) this.createdAt = LocalDateTime.now();
+        if (this.createdAt == null) this.createdAt = ZonedDateTime.now(ZoneId.of("Asia/Seoul")).toLocalDateTime();//ZonedDateTime.now(ZoneId.of("Asia/Seoul"))
     }
 
     public void update(Category category, String name, String address, String content, String imgUrl) {
