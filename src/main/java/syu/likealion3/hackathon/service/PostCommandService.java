@@ -57,7 +57,7 @@ public class PostCommandService {
                 .content(req.content())
                 .imgUrl(req.imgUrl())
                 .likeCount(0)
-                .createdAt(now())
+                .createdAt(ZoneDateTime.now(ZonId.of("Asia/Seoul")).toLocalDateTime())
                 .build();
 
         // 선택적 PIN
